@@ -68,14 +68,19 @@ One tabbed UI for both webhook systems of an environment:
   `src/lib/edge/secret-crypto.ts`). Only the ciphertext reaches the content
   tree, the browser, and the `x-edge-client-secret` header; the settings
   dialog never prefills or reveals it. Stored payload is `version: 2`
-  (`secretCipher`). The seal format is `v2.` with the **client ID as GCM
-  AAD**, so a cipher only opens next to the client ID it was sealed for;
-  changing the Client ID in settings requires re-entering the secret.
-  `readCredentials` (request.ts) accepts ONLY `v2.` ciphers; the validate
-  route is the one place that takes plaintext or the unbound `v1.` format
-  (ours before 2026-10-24, or the Edge Admin Console's) and returns a `v2.`
-  cipher — the page's migration effect uses it on load for both
-  `version: 1` plaintext items and `v1.` ciphers.
+  (`secretCipher`). The seal format is `v3.` with the caller's verified
+  **`org_id` token claim and the client ID as GCM AAD**, so a cipher only
+  opens for a signed-in user of the same organization, next to the client
+  ID it was sealed for; changing the Client ID requires re-entering the
+  secret, and a token without `org_id` is refused (`organization_unknown`).
+  `readCredentials` (request.ts, async — it re-verifies the token) accepts
+  ONLY `v3.` ciphers; the validate route is the one place that takes
+  plaintext (typed, or a `version: 1` plaintext item migrated on load) and
+  returns a `v3.` cipher. Older `v1.`/`v2.` ciphers are rejected, never
+  re-sealed (that would let a copied cipher be adopted by another org) —
+  the user re-enters the secret.
+  Upstream Edge/token error bodies are logged server-side only;
+  `edgeErrorResponse` returns fixed per-status messages.
   Never add a plaintext fallback — missing key must fail the save.
 - **API auth**: `src/middleware.ts` runs `requireSitecoreUser` on every
   `/api/*` route; `useEdgeApi` calls them with `authedFetch`.
