@@ -138,18 +138,17 @@ at it.
 | `EDGE_SECRET_ENCRYPTION_KEY` | Yes, for the Edge tab | Server-only. Passphrase of at least 16 characters used to seal the Edge Client Secret (AES-256-GCM, key derived with HKDF-SHA256). Generate with `openssl rand -base64 32`. Keep it stable: changing it makes stored secrets unreadable. Never prefix it with `NEXT_PUBLIC_`. |
 | `NEXT_PUBLIC_AUTH0_CLIENT_ID` | Yes | Client ID of the app's Single-page app client credentials. Without it every API route returns 500. |
 | `NEXT_PUBLIC_SITECORE_APP_ID` | Yes | Marketplace app ID, sent at sign-in as `product_codes=mkp_<id>`. |
-| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | No | GA4 measurement ID. Leave empty to disable analytics. |
 | `NEXT_PUBLIC_AUTH0_DOMAIN` | No | Defaults to `auth.sitecorecloud.io`. |
 | `NEXT_PUBLIC_AUTH0_AUDIENCE` | No | Defaults to `https://api-webapp.sitecorecloud.io`. |
 | `NEXT_PUBLIC_AUTH0_SCOPE` | No | Defaults to `openid profile email offline_access`. |
 | `AUTH0_ISSUER` | No | Server-only. Defaults to `https://auth.sitecorecloud.io/`. |
+| `CSP_FRAME_ANCESTORS` | No | Sites allowed to embed the app, as space-separated CSP sources for the `Content-Security-Policy: frame-ancestors` header. Defaults to `'self' https://*.sitecorecloud.io`. |
 
 See [`.env.example`](.env.example) for a template.
 
 If you also run the **Experience Edge Console** app, give both deployments the
-same `EDGE_SECRET_ENCRYPTION_KEY`. Webhooks then reads the credentials already
-stored by Experience Edge Console and re-seals them in its own format the
-first time it loads.
+same `EDGE_SECRET_ENCRYPTION_KEY`. Webhooks then uses the credentials already
+stored by Experience Edge Console, so the Edge tab needs no setup of its own.
 
 The app only runs inside SitecoreAI: the Marketplace SDK needs the SitecoreAI
 host iframe. Opening the deployment directly in a browser shows a "Failed to
@@ -185,11 +184,12 @@ a separate development app in App Studio.
   ID). Sign-in doesn't block the Authoring tab.
 - **Secrets**: the only stored secret is the Edge Client Secret. The server
   validates it, then seals it with AES-256-GCM using the deployment's
-  `EDGE_SECRET_ENCRYPTION_KEY`, with the Client ID as authenticated data. Only
-  the ciphertext reaches the content tree and the browser. The settings
-  dialog never shows or prefills it. Without the encryption key the app
-  refuses to save credentials; it never stores plaintext. Older plaintext or
-  unbound values are upgraded automatically on load.
+  `EDGE_SECRET_ENCRYPTION_KEY`, with your Sitecore Cloud organization ID and
+  the Client ID as authenticated data. Only the ciphertext reaches the
+  content tree and the browser. The settings dialog never shows or prefills
+  it. Without the encryption key the app refuses to save credentials; it
+  never stores plaintext. A plaintext secret left by an older version is
+  sealed on load; secrets sealed in an older format must be re-entered.
 - **Authorization item values** (the secret header of Authoring webhooks) are
   stored by SitecoreAI as regular item fields, as SitecoreAI itself does.
 - **Data flow**: Authoring webhook data stays between the browser and your
@@ -202,9 +202,23 @@ a separate development app in App Studio.
   (checked at connect time, which also blocks DNS rebinding), redirects are
   not followed, the timeout is 15 seconds and the response body read is
   capped.
-- **Analytics**: if `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set, Google Analytics
-  receives page views and a `marketplace_client_ready` event, tagged with the
-  app name. No content or webhook data is sent.
+- **Security headers**: every response sends HSTS,
+  `Content-Security-Policy: frame-ancestors` (only SitecoreAI may embed the
+  app, see `CSP_FRAME_ANCESTORS`), `X-Content-Type-Options`,
+  `Referrer-Policy` and `Permissions-Policy`; API responses are never cached.
+- **Audit log**: sign-in decisions and sensitive operations (sealing the
+  Edge secret, creating, updating and deleting Edge webhooks, test calls) are
+  written as JSON audit lines with UTC timestamps to the server log: who
+  acted (user and organization ID), the outcome and status, and for test
+  calls the target host name and the endpoint's HTTP status. They never
+  contain tokens, secrets, URL paths, headers, bodies or content.
+- **No analytics**: the app uses no analytics, tracking or advertising
+  services. Fonts are bundled with the app at build time, so no request goes
+  to Google Fonts.
+- **Policies**: [Privacy policy](PRIVACY.md),
+  [Terms of service](TERMS.md),
+  [Data usage disclosure](DATA-USAGE.md) and
+  [Security policy](SECURITY.md).
 
 ## Limitations
 
@@ -231,6 +245,7 @@ a separate development app in App Studio.
   - `src/app/`: the page and the `/api/edge/*` routes
   - `src/lib/edge/`: Edge Admin API client, token cache, secret sealing,
     SSRF-safe HTTPS client
+  - `src/lib/audit.ts`: audit lines for the sensitive Edge operations
   - `src/lib/marketplace-auth/`: Sitecore Cloud sign-in kit (see its
     [README](src/lib/marketplace-auth/README.md))
   - `src/utils/`: Authoring GraphQL helpers, settings storage, hooks
@@ -239,7 +254,11 @@ a separate development app in App Studio.
 
 ## Support
 
-Report bugs and request features by opening an issue in this repository.
+Report bugs and request features in
+[GitHub Issues](https://github.com/robertobarbedo/sitecoreai-marketplace-webhooks/issues).
+Report security vulnerabilities privately as described in the
+[Security policy](SECURITY.md). See also the [Privacy policy](PRIVACY.md),
+[Terms of service](TERMS.md) and [Data usage disclosure](DATA-USAGE.md).
 This is a community app and is not an official Sitecore product.
 
 ## License

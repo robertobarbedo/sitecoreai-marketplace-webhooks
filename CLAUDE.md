@@ -96,6 +96,22 @@ One tabbed UI for both webhook systems of an environment:
   checked inside the socket's own DNS lookup, so no DNS-rebinding gap), no
   redirects followed, 15 s timeout, response read capped. Never switch it
   back to plain `fetch`.
+- **Audit log**: besides the kit's `auth` line per request, the sensitive
+  routes write one JSON audit line each via `src/lib/audit.ts` (wraps the
+  kit's `auditLog`; caller `sub`/`org_id` are decoded from the
+  already-verified bearer token): `edge.secret.seal` (validate),
+  `edge.webhook.create|update|delete`, `edge.webhook.test`. Log only ids,
+  outcome, status, target **host** and the endpoint's status — never the URI
+  path/query, secrets, tokens, headers or bodies. Keep PRIVACY.md and
+  DATA-USAGE.md in sync when adding events.
+- No analytics. Fonts (Inter, JetBrains Mono) are self-hosted via
+  `next/font/google` in `layout.tsx` (CSS vars `--font-inter`,
+  `--font-jetbrains-mono`, used by `--font-family-*` in globals.css) — don't
+  re-add a Google Fonts `<link>`.
+- Marketplace SDK: `@sitecore-marketplace-sdk/client` ^0.4.1 and `/xmc`
+  ^0.4.4 (`ClientSDK.init({ target, modules: [XMC] })`,
+  `client.mutate("xmc.authoring.graphql", { params: { query: {
+  sitecoreContextId }, body: { query } } })`).
 - Browser → own Next.js `/api/edge/*` routes → OAuth token
   (`auth.sitecorecloud.io`, client_credentials, audience
   `https://api.sitecorecloud.io`) → Admin API

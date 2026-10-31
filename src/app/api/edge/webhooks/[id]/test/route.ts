@@ -11,6 +11,7 @@ import {
   publicHttpsRequest,
 } from "@/src/lib/edge/public-https";
 import { describeRequestError } from "@/src/utils/ssrfGuard";
+import { auditOperation, audited, hostOf } from "@/src/lib/audit";
 import type { Webhook, WebhookTestResult } from "@/src/types/edge";
 
 /**
@@ -27,6 +28,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const TEST_TIMEOUT_MS = 15_000;
 const RESPONSE_BODY_LIMIT = 4_000;
+const TEST_EVENT = "edge.webhook.test";
 
 /** Sent when the webhook has no body configured, so the call carries something recognizable. */
 function defaultTestBody(webhook: Webhook): string {
@@ -46,13 +48,13 @@ function defaultTestBody(webhook: Webhook): string {
 }
 
 export async function POST(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+
   const auth = await readCredentials(request);
   if (!auth.ok) {
-    return auth.response;
+    return audited(request, TEST_EVENT, auth.response, { webhookId: id });
   }
   const credentials = auth.credentials;
-
-  const { id } = await context.params;
 
   let webhook: Webhook | null;
   try {
@@ -63,17 +65,31 @@ export async function POST(request: Request, context: RouteContext) {
     );
     webhook = await readEdgeResponse<Webhook>(response);
   } catch (error) {
-    return edgeErrorResponse(error);
+    return audited(request, TEST_EVENT, edgeErrorResponse(error), {
+      webhookId: id,
+    });
   }
 
   if (!webhook?.uri) {
-    return jsonError("validation", 404, {
-      detail: "Webhook not found, or it has no URI configured",
-    });
+    return audited(
+      request,
+      TEST_EVENT,
+      jsonError("validation", 404, {
+        detail: "Webhook not found, or it has no URI configured",
+      }),
+      { webhookId: id },
+    );
   }
+  // Only the host goes to the audit log, never the URI path or query.
+  const targetHost = hostOf(webhook.uri);
   try {
     parsePublicHttpsUrl(webhook.uri);
   } catch (error) {
+    auditOperation(request, TEST_EVENT, "deny", {
+      webhookId: id,
+      targetHost,
+      reason: "blocked_url",
+    });
     return jsonError("validation", 400, {
       field: "uri",
       detail: `This webhook can't be tested from here: ${
@@ -100,6 +116,11 @@ export async function POST(request: Request, context: RouteContext) {
       maxResponseChars: RESPONSE_BODY_LIMIT,
     });
 
+    auditOperation(request, TEST_EVENT, "allow", {
+      webhookId: id,
+      targetHost,
+      upstreamStatus: response.status,
+    });
     return NextResponse.json({
       ok: response.status >= 200 && response.status < 300,
       status: response.status,
@@ -113,11 +134,22 @@ export async function POST(request: Request, context: RouteContext) {
     } satisfies WebhookTestResult);
   } catch (error) {
     if (error instanceof BlockedUrlError) {
+      auditOperation(request, TEST_EVENT, "deny", {
+        webhookId: id,
+        targetHost,
+        reason: "blocked_url",
+      });
       return jsonError("validation", 400, {
         field: "uri",
         detail: `This webhook can't be tested from here: ${error.message}`,
       });
     }
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    auditOperation(request, TEST_EVENT, "error", {
+      webhookId: id,
+      targetHost,
+      reason: timedOut ? "timeout" : "request_failed",
+    });
     // A refused connection, DNS failure or timeout is a legitimate test
     // outcome, not an app error — report it as a result the user can read.
     return NextResponse.json({
@@ -126,10 +158,9 @@ export async function POST(request: Request, context: RouteContext) {
       requestMethod: webhook.method,
       requestUri: webhook.uri,
       requestBody: body,
-      errorMessage:
-        error instanceof Error && error.name === "TimeoutError"
-          ? `No response within ${TEST_TIMEOUT_MS / 1000} seconds`
-          : describeRequestError(error),
+      errorMessage: timedOut
+        ? `No response within ${TEST_TIMEOUT_MS / 1000} seconds`
+        : describeRequestError(error),
     } satisfies WebhookTestResult);
   }
 }

@@ -5,9 +5,13 @@ import {
   edgeErrorResponse,
   jsonError,
 } from "@/src/lib/edge/request";
+import { audited, hostOf } from "@/src/lib/audit";
 import type { Webhook, WebhookInput } from "@/src/types/edge";
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+const UPDATE_EVENT = "edge.webhook.update";
+const DELETE_EVENT = "edge.webhook.delete";
 
 export async function GET(request: Request, context: RouteContext) {
   const auth = await readCredentials(request);
@@ -32,27 +36,38 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+
   const auth = await readCredentials(request);
   if (!auth.ok) {
-    return auth.response;
+    return audited(request, UPDATE_EVENT, auth.response, { webhookId: id });
   }
   const credentials = auth.credentials;
-
-  const { id } = await context.params;
 
   let input: WebhookInput;
   try {
     input = (await request.json()) as WebhookInput;
   } catch {
-    return jsonError("validation", 400, { detail: "Invalid JSON body" });
+    return audited(
+      request,
+      UPDATE_EVENT,
+      jsonError("validation", 400, { detail: "Invalid JSON body" }),
+      { webhookId: id },
+    );
   }
 
   if (!input.uri || !input.uri.startsWith("https://")) {
-    return jsonError("validation", 400, {
-      field: "uri",
-      detail: "Webhook URI must use HTTPS",
-    });
+    return audited(
+      request,
+      UPDATE_EVENT,
+      jsonError("validation", 400, {
+        field: "uri",
+        detail: "Webhook URI must use HTTPS",
+      }),
+      { webhookId: id },
+    );
   }
+  const targetHost = hostOf(input.uri);
 
   try {
     const response = await edgeFetch(
@@ -64,20 +79,26 @@ export async function PUT(request: Request, context: RouteContext) {
       },
     );
     const webhook = await readEdgeResponse<Webhook>(response);
-    return NextResponse.json(webhook);
+    return audited(request, UPDATE_EVENT, NextResponse.json(webhook), {
+      webhookId: id,
+      targetHost,
+    });
   } catch (error) {
-    return edgeErrorResponse(error);
+    return audited(request, UPDATE_EVENT, edgeErrorResponse(error), {
+      webhookId: id,
+      targetHost,
+    });
   }
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+
   const auth = await readCredentials(request);
   if (!auth.ok) {
-    return auth.response;
+    return audited(request, DELETE_EVENT, auth.response, { webhookId: id });
   }
   const credentials = auth.credentials;
-
-  const { id } = await context.params;
 
   try {
     const response = await edgeFetch(
@@ -86,8 +107,15 @@ export async function DELETE(request: Request, context: RouteContext) {
       { method: "DELETE" },
     );
     await readEdgeResponse(response);
-    return new NextResponse(null, { status: 204 });
+    return audited(
+      request,
+      DELETE_EVENT,
+      new NextResponse(null, { status: 204 }),
+      { webhookId: id },
+    );
   } catch (error) {
-    return edgeErrorResponse(error);
+    return audited(request, DELETE_EVENT, edgeErrorResponse(error), {
+      webhookId: id,
+    });
   }
 }

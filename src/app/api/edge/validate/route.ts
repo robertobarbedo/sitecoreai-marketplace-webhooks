@@ -8,6 +8,9 @@ import {
   secretErrorResponse,
 } from "@/src/lib/edge/request";
 import { sealForClient } from "@/src/lib/edge/secret-crypto";
+import { audited } from "@/src/lib/audit";
+
+const EVENT = "edge.secret.seal";
 
 /**
  * Validates a credential pair by exchanging it for a token and calling
@@ -26,12 +29,12 @@ import { sealForClient } from "@/src/lib/edge/secret-crypto";
 export async function POST(request: Request) {
   const raw = readRawCredentials(request);
   if (!raw) {
-    return missingCredentialsResponse();
+    return audited(request, EVENT, missingCredentialsResponse());
   }
 
   const org = await readCallerOrganization(request);
   if (!org.ok) {
-    return org.response;
+    return audited(request, EVENT, org.response);
   }
 
   // Fail before touching Edge if this deployment cannot seal secrets — saving
@@ -43,7 +46,9 @@ export async function POST(request: Request) {
       clientId: raw.clientId,
     });
   } catch (error) {
-    return secretErrorResponse(error);
+    return audited(request, EVENT, secretErrorResponse(error), {
+      reason: "seal_failed",
+    });
   }
 
   try {
@@ -53,8 +58,14 @@ export async function POST(request: Request) {
       { method: "GET" },
     );
     await readEdgeResponse(response);
-    return NextResponse.json({ ok: true, sealedSecret: secret.sealed });
+    return audited(
+      request,
+      EVENT,
+      NextResponse.json({ ok: true, sealedSecret: secret.sealed }),
+    );
   } catch (error) {
-    return edgeErrorResponse(error);
+    return audited(request, EVENT, edgeErrorResponse(error), {
+      reason: "validation_failed",
+    });
   }
 }

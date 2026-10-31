@@ -5,7 +5,10 @@ import {
   edgeErrorResponse,
   jsonError,
 } from "@/src/lib/edge/request";
+import { audited, hostOf } from "@/src/lib/audit";
 import type { Webhook, WebhookInput } from "@/src/types/edge";
+
+const CREATE_EVENT = "edge.webhook.create";
 
 export async function GET(request: Request) {
   const auth = await readCredentials(request);
@@ -28,7 +31,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await readCredentials(request);
   if (!auth.ok) {
-    return auth.response;
+    return audited(request, CREATE_EVENT, auth.response);
   }
   const credentials = auth.credentials;
 
@@ -36,15 +39,24 @@ export async function POST(request: Request) {
   try {
     input = (await request.json()) as WebhookInput;
   } catch {
-    return jsonError("validation", 400, { detail: "Invalid JSON body" });
+    return audited(
+      request,
+      CREATE_EVENT,
+      jsonError("validation", 400, { detail: "Invalid JSON body" }),
+    );
   }
 
   if (!input.uri || !input.uri.startsWith("https://")) {
-    return jsonError("validation", 400, {
-      field: "uri",
-      detail: "Webhook URI must use HTTPS",
-    });
+    return audited(
+      request,
+      CREATE_EVENT,
+      jsonError("validation", 400, {
+        field: "uri",
+        detail: "Webhook URI must use HTTPS",
+      }),
+    );
   }
+  const targetHost = hostOf(input.uri);
 
   try {
     const response = await edgeFetch(credentials, "/webhooks", {
@@ -52,8 +64,15 @@ export async function POST(request: Request) {
       body: JSON.stringify(input),
     });
     const webhook = await readEdgeResponse<Webhook>(response);
-    return NextResponse.json(webhook, { status: 201 });
+    return audited(
+      request,
+      CREATE_EVENT,
+      NextResponse.json(webhook, { status: 201 }),
+      { webhookId: webhook?.id, targetHost },
+    );
   } catch (error) {
-    return edgeErrorResponse(error);
+    return audited(request, CREATE_EVENT, edgeErrorResponse(error), {
+      targetHost,
+    });
   }
 }
