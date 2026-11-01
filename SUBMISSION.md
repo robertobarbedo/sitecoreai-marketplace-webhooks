@@ -88,7 +88,7 @@ Off. The app does not use AI or machine learning.
   - `NEXT_PUBLIC_SITECORE_APP_ID` (required)
   - `EDGE_SECRET_ENCRYPTION_KEY` (required for the Edge tab; server-only, 16+ characters; use the same value as Experience Edge Console to share its stored credentials)
   - Optional: `NEXT_PUBLIC_AUTH0_DOMAIN`, `NEXT_PUBLIC_AUTH0_AUDIENCE`, `NEXT_PUBLIC_AUTH0_SCOPE`, `AUTH0_ISSUER`, `CSP_FRAME_ANCESTORS`
-- App logo: `public/icon.svg`
+- App logo: `public/webhooks-logo-duotone.svg`
 
 ## 11. Submission details (visible only to Sitecore)
 

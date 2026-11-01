@@ -111,7 +111,7 @@ form, except on `validate`.
 3. Add the **Full Screen** extension point with route `/`.
 4. Under API access, enable **SitecoreAI APIs**.
 5. Set the deployment URL to `https://<your-deployment>/`.
-6. Upload the app logo from [`public/icon.svg`](public/icon.svg).
+6. Upload the app logo from [`public/webhooks-logo-duotone.svg`](public/webhooks-logo-duotone.svg).
 7. Set up custom authorization: create client credentials of type
    **Single-page app**, and register your deployment origin
    (`https://<your-deployment>`) as callback URL (with a trailing `/`), logout
