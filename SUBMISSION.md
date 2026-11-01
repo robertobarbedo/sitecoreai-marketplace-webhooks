@@ -1,7 +1,7 @@
 # Marketplace submission: Webhooks
 
 Copy-paste text for Sitecore's public-app submission form, in form order.
-Replace every `{{...}}` placeholder before submitting.
+Replace `{{APP_URL}}` with the production deployment URL before submitting.
 
 ## 1. App name
 
@@ -66,7 +66,7 @@ PNG, shown as 600×900 thumbnails. Capture during live QA.
 
 ## 8. Data usage disclosure
 
-Paste from `DATA-USAGE.md` (replace `rb205@proton.me` in it first).
+Paste from `DATA-USAGE.md`.
 
 Summary: Authoring webhook data stays between the browser and the customer's SitecoreAI environment through the Marketplace SDK, with the user's own permissions. For the Edge tab, the Edge Client ID and a server-sealed Client Secret are stored in a settings item in the customer's content tree; requests go through the app's own signed-in API routes to `auth.sitecorecloud.io` and `edge.sitecorecloud.io`, and test calls go to the webhook's own endpoint. Nothing is persisted server-side; audit logs (no tokens, secrets, URL paths, headers or bodies) are kept for 90 days.
 
@@ -115,4 +115,4 @@ Next.js lists sharp (LGPL-3.0 libvips) as an optional dependency for image optim
 - [ ] `NEXT_PUBLIC_AUTH0_CLIENT_ID`, `NEXT_PUBLIC_SITECORE_APP_ID` and `EDGE_SECRET_ENCRYPTION_KEY` set on the production host; app rebuilt
 - [ ] Production client credentials registered with `{{APP_URL}}` callback, logout, web origin and CORS URLs
 - [ ] Screenshots captured (PNG), with no real secrets, authorization values or private endpoints visible
-- [ ] `rb205@proton.me` replaced in DATA-USAGE.md, PRIVACY.md, TERMS.md, SECURITY.md; `Roberto Barbedo`, `rb205@proton.me`, `{{APP_URL}}` replaced in this form
+- [ ] `{{APP_URL}}` replaced with the production deployment URL in this form
